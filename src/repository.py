@@ -67,3 +67,46 @@ def direct_dependencies(packages, name):
     if name not in packages:
         raise ValueError(f"Пакет {name} не найден в репозитории")
     return packages[name]["depends"]
+
+
+def dependency_name(requirement):
+    """Отделить имя требования от ограничения версии."""
+    return re.split(r"[<>=~]", requirement, maxsplit=1)[0]
+
+
+def build_providers(packages):
+    """Найти пакеты, предоставляющие каждое дополнительное имя."""
+    providers = {}
+    for name, record in packages.items():
+        for requirement in record["provides"]:
+            provided = dependency_name(requirement)
+            providers.setdefault(provided, set()).add(name)
+    return providers
+
+
+def resolve_dependency(requirement, packages, providers):
+    """Найти настоящий пакет или единственного поставщика."""
+    name = dependency_name(requirement)
+    if name in packages:
+        return name
+    candidates = providers.get(name, set())
+    if len(candidates) == 1:
+        return next(iter(candidates))
+    return name
+
+
+def repository_graph(packages):
+    """Построить граф пакетов из разобранного APKINDEX."""
+    providers = build_providers(packages)
+    graph = {name: [] for name in packages}
+    for name, record in packages.items():
+        dependencies = set()
+        for requirement in record["depends"]:
+            if requirement.startswith("!"):
+                continue
+            target = resolve_dependency(requirement, packages, providers)
+            dependencies.add(target)
+            if target not in packages:
+                graph[target] = None
+        graph[name] = sorted(dependencies)
+    return graph

@@ -34,6 +34,10 @@ def bfs(graph, start, excluded=""):
     result = {}
     while queue:
         current = queue.popleft()
+        if graph[current] is None:
+            raise ValueError(
+                f"Не найден однозначный пакет-поставщик: {current}"
+            )
         dependencies = [
             name for name in sorted(graph[current])
             if not excluded or excluded not in name

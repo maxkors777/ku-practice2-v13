@@ -87,7 +87,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn("app", packages)
 
     def test_program_output(self):
-        """Программа должна выводить прямые зависимости."""
+        """Программа должна выводить граф зависимостей."""
         output = io.StringIO()
         with patch(
             "src.main.load_repository",
@@ -99,7 +99,7 @@ class RepositoryTests(unittest.TestCase):
                     "--repository", "https://example.com/main",
                 ])
         self.assertEqual(code, 0)
-        self.assertEqual(output.getvalue(), "lib>=1.0\n")
+        self.assertEqual(output.getvalue(), "app -> lib\nlib -> (нет)\n")
 
     def test_network_error(self):
         """Ошибка сети должна давать сообщение и код 1."""

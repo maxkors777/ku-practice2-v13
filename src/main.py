@@ -1,18 +1,18 @@
-"""Этап 2: получение прямых зависимостей Alpine APK."""
-
+"""Этап 3: построение графа зависимостей и обход BFS."""
 import argparse
 from pathlib import Path
 import re
 import sys
 import tarfile
 from urllib.parse import urlparse
-from .repository import direct_dependencies, load_repository
+from .repository import load_repository, repository_graph
+from .graph import bfs, load_test_graph
 
 
 def build_parser():
     """Описать параметры, которые принимает программа."""
     parser = argparse.ArgumentParser(
-        description="Alpine dependencies: этап 2"
+        description="Alpine dependencies: этап 3"
     )
     parser.add_argument(
         "--package", required=True, help="Имя пакета"
@@ -95,20 +95,22 @@ def arguments(argv=None):
 
 
 def main(argv=None):
-    """Загрузить репозиторий и вывести прямые зависимости."""
+    """Построить и вывести граф зависимостей."""
     args = arguments(argv)
     try:
         if args.test:
-            raise ValueError(
-                "Чтение тестового графа будет добавлено на этапе 3"
-            )
-        packages = load_repository(args.repository)
-        dependencies = direct_dependencies(packages, args.package)
-        if dependencies:
-            for dependency in dependencies:
-                print(dependency)
+            graph = load_test_graph(args.repository)
         else:
-            print("(нет прямых зависимостей)")
+            packages = load_repository(args.repository)
+            if args.package not in packages:
+                raise ValueError(
+                    f"Пакет {args.package} не найден в репозитории"
+                )
+            graph = repository_graph(packages)
+        selected = bfs(graph, args.package, args.filter)
+        for name, dependencies in selected.items():
+            text = ", ".join(dependencies) or "(нет)"
+            print(name + " -> " + text)
     except (OSError, ValueError, tarfile.TarError, EOFError) as error:
         print(f"Ошибка: {error}", file=sys.stderr)
         return 1
