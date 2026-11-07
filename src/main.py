@@ -1,4 +1,4 @@
-"""Этап 3: построение графа зависимостей и обход BFS."""
+"""Этап 4: прямые и обратные зависимости пакетов."""
 import argparse
 from pathlib import Path
 import re
@@ -6,13 +6,13 @@ import sys
 import tarfile
 from urllib.parse import urlparse
 from .repository import load_repository, repository_graph
-from .graph import bfs, load_test_graph
+from .graph import bfs, load_test_graph, reverse_graph
 
 
 def build_parser():
     """Описать параметры, которые принимает программа."""
     parser = argparse.ArgumentParser(
-        description="Alpine dependencies: этап 3"
+        description="Alpine dependencies: этап 4"
     )
     parser.add_argument(
         "--package", required=True, help="Имя пакета"
@@ -32,6 +32,10 @@ def build_parser():
     parser.add_argument(
         "--filter", default="",
         help="Исключать имена с указанной подстрокой"
+    )
+    parser.add_argument(
+        "--reverse", action="store_true",
+        help="Найти прямые и транзитивные обратные зависимости"
     )
     return parser
 
@@ -95,7 +99,7 @@ def arguments(argv=None):
 
 
 def main(argv=None):
-    """Построить и вывести граф зависимостей."""
+    """Построить граф прямых или обратных зависимостей."""
     args = arguments(argv)
     try:
         if args.test:
@@ -107,10 +111,16 @@ def main(argv=None):
                     f"Пакет {args.package} не найден в репозитории"
                 )
             graph = repository_graph(packages)
+        if args.reverse:
+            graph = reverse_graph(graph)
         selected = bfs(graph, args.package, args.filter)
         for name, dependencies in selected.items():
             text = ", ".join(dependencies) or "(нет)"
             print(name + " -> " + text)
+        if args.reverse:
+            dependents = [name for name in selected if name != args.package]
+            text = ", ".join(dependents) or "(нет)"
+            print("Обратные зависимости: " + text)
     except (OSError, ValueError, tarfile.TarError, EOFError) as error:
         print(f"Ошибка: {error}", file=sys.stderr)
         return 1

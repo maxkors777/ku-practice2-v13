@@ -48,3 +48,15 @@ def bfs(graph, start, excluded=""):
                 visited.add(dependency)
                 queue.append(dependency)
     return result
+
+
+def reverse_graph(graph):
+    """Развернуть рёбра всего доступного графа."""
+    result = {name: [] for name in graph}
+    for name, dependencies in graph.items():
+        for dependency in dependencies or []:
+            result[dependency].append(name)
+    return {
+        name: sorted(set(dependencies))
+        for name, dependencies in result.items()
+    }
