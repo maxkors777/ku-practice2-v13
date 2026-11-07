@@ -1,12 +1,12 @@
-"""Автоматические проверки первого этапа."""
+"""Автоматические проверки параметров программы."""
 
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import redirect_stderr
 import io
 from pathlib import Path
 import tempfile
 import unittest
 
-from main import arguments, main
+from main import arguments
 
 
 REPOSITORY = (
@@ -34,22 +34,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 2)
         self.assertIn(message, output.getvalue())
 
-    def test_normal_output(self):
-        """Проверить успешный запуск и все пять настроек."""
-        output = io.StringIO()
-        with redirect_stdout(output):
-            code = main(self.base_args())
-        self.assertEqual(code, 0)
-        self.assertEqual(
-            output.getvalue().splitlines(),
-            [
-                "package=zlib",
-                f"repository={REPOSITORY}",
-                "test=False",
-                "output=graph.svg",
-                "filter=",
-            ],
-        )
+    def test_valid_parameters(self):
+        """Проверить чтение всех пяти настроек."""
+        args = arguments(self.base_args())
+        self.assertEqual(args.package, "zlib")
+        self.assertEqual(args.repository, REPOSITORY)
+        self.assertFalse(args.test)
+        self.assertEqual(args.output, "graph.svg")
+        self.assertEqual(args.filter, "")
 
     def test_invalid_package(self):
         """Имя пакета с пробелом должно отклоняться."""
@@ -83,7 +75,7 @@ class CliTests(unittest.TestCase):
             self.assert_rejected(args, "--repository: файл не найден")
 
     def test_valid_test_mode(self):
-        """Переключатель --test должен включать тестовый режим."""
+        """Переключатель --test включает тестовый режим."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "graph.json"
             path.write_text('{"A": []}', encoding="utf-8")

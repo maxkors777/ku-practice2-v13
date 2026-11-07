@@ -1,16 +1,18 @@
-"""Этап 1: чтение, проверка и вывод параметров программы."""
+"""Этап 2: получение прямых зависимостей Alpine APK."""
 
 import argparse
 from pathlib import Path
 import re
 import sys
+import tarfile
 from urllib.parse import urlparse
+from .repository import direct_dependencies, load_repository
 
 
 def build_parser():
     """Описать параметры, которые принимает программа."""
     parser = argparse.ArgumentParser(
-        description="Alpine dependencies: этап 1"
+        description="Alpine dependencies: этап 2"
     )
     parser.add_argument(
         "--package", required=True, help="Имя пакета"
@@ -93,10 +95,23 @@ def arguments(argv=None):
 
 
 def main(argv=None):
-    """Вывести все настройки в формате ключ=значение."""
+    """Загрузить репозиторий и вывести прямые зависимости."""
     args = arguments(argv)
-    for key, value in vars(args).items():
-        print(f"{key}={value}")
+    try:
+        if args.test:
+            raise ValueError(
+                "Чтение тестового графа будет добавлено на этапе 3"
+            )
+        packages = load_repository(args.repository)
+        dependencies = direct_dependencies(packages, args.package)
+        if dependencies:
+            for dependency in dependencies:
+                print(dependency)
+        else:
+            print("(нет прямых зависимостей)")
+    except (OSError, ValueError, tarfile.TarError, EOFError) as error:
+        print(f"Ошибка: {error}", file=sys.stderr)
+        return 1
     return 0
 
 
