@@ -1,18 +1,20 @@
-"""Этап 4: прямые и обратные зависимости пакетов."""
+"""Этап 5: визуализация графа зависимостей."""
 import argparse
 from pathlib import Path
+import subprocess
 import re
 import sys
 import tarfile
 from urllib.parse import urlparse
 from .repository import load_repository, repository_graph
 from .graph import bfs, load_test_graph, reverse_graph
+from .render import render_svg
 
 
 def build_parser():
     """Описать параметры, которые принимает программа."""
     parser = argparse.ArgumentParser(
-        description="Alpine dependencies: этап 4"
+        description="Alpine dependencies: этап 5"
     )
     parser.add_argument(
         "--package", required=True, help="Имя пакета"
@@ -36,6 +38,14 @@ def build_parser():
     parser.add_argument(
         "--reverse", action="store_true",
         help="Найти прямые и транзитивные обратные зависимости"
+    )
+    parser.add_argument(
+        "--visualize", action="store_true",
+        help="Сохранить PlantUML и изображение SVG"
+    )
+    parser.add_argument(
+        "--jar", default="tools/plantuml.jar",
+        help="Путь к файлу PlantUML JAR"
     )
     return parser
 
@@ -98,30 +108,50 @@ def arguments(argv=None):
     return args
 
 
+def load_graph(args):
+    """Получить граф из тестового файла или индекса Alpine."""
+    if args.test:
+        return load_test_graph(args.repository)
+    packages = load_repository(args.repository)
+    if args.package not in packages:
+        raise ValueError(
+            f"Пакет {args.package} не найден в репозитории"
+        )
+    return repository_graph(packages)
+
+
+def print_graph(graph):
+    """Вывести вершины и связи в порядке обхода."""
+    for name, dependencies in graph.items():
+        text = ", ".join(dependencies) or "(нет)"
+        print(name + " -> " + text)
+
+
+def execute(args):
+    """Выполнить выбранный анализ и необязательную отрисовку."""
+    graph = load_graph(args)
+    if args.reverse:
+        graph = reverse_graph(graph)
+    selected = bfs(graph, args.package, args.filter)
+    print_graph(selected)
+    if args.reverse:
+        dependents = [name for name in selected if name != args.package]
+        text = ", ".join(dependents) or "(нет)"
+        print("Обратные зависимости: " + text)
+    if args.visualize:
+        output = render_svg(selected, args.output, args.jar)
+        print(f"Создано изображение: {output}")
+
+
 def main(argv=None):
-    """Построить граф прямых или обратных зависимостей."""
+    """Запустить анализ и обработать ошибки выполнения."""
     args = arguments(argv)
     try:
-        if args.test:
-            graph = load_test_graph(args.repository)
-        else:
-            packages = load_repository(args.repository)
-            if args.package not in packages:
-                raise ValueError(
-                    f"Пакет {args.package} не найден в репозитории"
-                )
-            graph = repository_graph(packages)
-        if args.reverse:
-            graph = reverse_graph(graph)
-        selected = bfs(graph, args.package, args.filter)
-        for name, dependencies in selected.items():
-            text = ", ".join(dependencies) or "(нет)"
-            print(name + " -> " + text)
-        if args.reverse:
-            dependents = [name for name in selected if name != args.package]
-            text = ", ".join(dependents) or "(нет)"
-            print("Обратные зависимости: " + text)
-    except (OSError, ValueError, tarfile.TarError, EOFError) as error:
+        execute(args)
+    except (
+        OSError, ValueError, tarfile.TarError, EOFError,
+        subprocess.SubprocessError,
+    ) as error:
         print(f"Ошибка: {error}", file=sys.stderr)
         return 1
     return 0
