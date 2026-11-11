@@ -1,4 +1,4 @@
-"""Этап 1: чтение, проверка и вывод параметров программы."""
+"""Stage 2: прямые зависимости указанной версии Python-пакета."""
 
 import argparse
 from pathlib import Path
@@ -6,38 +6,37 @@ import re
 import sys
 from urllib.parse import urlparse
 
+from .repository import direct_dependencies
+
 
 def build_parser():
-    """Описать параметры, которые принимает программа."""
+    """Описать семь параметров принятого первого этапа."""
     parser = argparse.ArgumentParser(
-        description="Alpine dependencies: этап 1"
+        description="Python dependencies: stage 2"
     )
     parser.add_argument(
-        "--package", required=True, help="Имя пакета"
+        "--package", required=True, help="Имя Python-пакета"
     )
     parser.add_argument(
         "--repository", required=True,
-        help="URL репозитория или путь к тестовому JSON"
+        help="Корень JSON API PyPI или путь к тестовому JSON"
     )
     parser.add_argument(
         "--test", action="store_true",
-        help="Использовать тестовый JSON"
+        help="Тестовый режим: обработка графа добавляется в stage 3"
     )
     parser.add_argument(
-        "--output", default="graph.svg",
-        help="Имя выходного файла SVG"
+        "--output", default="graph.svg", help="Имя будущего SVG"
     )
     parser.add_argument(
-        "--filter", default="",
-        help="Исключать имена с указанной подстрокой"
+        "--filter", default="", help="Фильтр для stage 3"
     )
     parser.add_argument(
-        "--version", required=True,
-        help="Версия анализируемого пакета"
+        "--version", required=True, help="Точная запись версии пакета"
     )
     parser.add_argument(
         "--max-depth", required=True, type=int,
-        help="Максимальная глубина анализа: целое число от 0"
+        help="Глубина от 0: применяется начиная со stage 3"
     )
     return parser
 
@@ -76,32 +75,26 @@ def validate_output(args):
 
 def validate_filter(args):
     """Проверить символы фильтра и исключение корневого пакета."""
-    if args.filter and not re.fullmatch(
-        r"[A-Za-z0-9+_.-]+", args.filter
-    ):
+    if args.filter and not re.fullmatch(r"[A-Za-z0-9+_.-]+", args.filter):
         raise ValueError(
             "--filter: нужны символы имени пакета, без пробелов"
         )
     if args.filter and args.filter in args.package:
         raise ValueError("--filter: исключает сам анализируемый пакет")
 
+
 def validate_version(args):
-    """Проверить базовый формат версии Alpine-пакета."""
-    if not re.fullmatch(
-        r"[0-9][A-Za-z0-9._+~-]*", args.version
-    ):
-        raise ValueError(
-            "--version: версия должна начинаться с цифры "
-            "и содержать только буквы, цифры или . _ + ~ -"
-        )
+    """Проверить запись версии, не реализуя весь стандарт PEP 440."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.!+_-]*", args.version):
+        raise ValueError("--version: версия содержит недопустимые символы")
 
 
 def validate_depth(args):
     """Проверить неотрицательную глубину анализа."""
     if args.max_depth < 0:
-        raise ValueError(
-            "--max-depth: глубина не может быть отрицательной"
-        )
+        raise ValueError("--max-depth: глубина не может быть отрицательной")
+
+
 def arguments(argv=None):
     """Прочитать параметры и сообщить об ошибках ввода."""
     parser = build_parser()
@@ -118,11 +111,24 @@ def arguments(argv=None):
     return args
 
 
+def execute(args):
+    """Получить и вывести только прямые требования данного релиза."""
+    if args.test:
+        raise ValueError("Обработка тестового графа добавляется в stage 3")
+    dependencies = direct_dependencies(
+        args.repository, args.package, args.version
+    )
+    print("\n".join(dependencies) or "(нет объявленных прямых зависимостей)")
+
+
 def main(argv=None):
-    """Вывести все настройки в формате ключ=значение."""
+    """Выполнить второй этап и обработать ошибки данных и сети."""
     args = arguments(argv)
-    for key, value in vars(args).items():
-        print(f"{key}={value}")
+    try:
+        execute(args)
+    except (OSError, ValueError) as error:
+        print(f"Ошибка: {error}", file=sys.stderr)
+        return 1
     return 0
 
 
