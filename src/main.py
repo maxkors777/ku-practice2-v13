@@ -1,54 +1,43 @@
-"""Этап 5: визуализация графа зависимостей."""
+"""Stage 2: прямые зависимости указанной версии Python-пакета."""
+
 import argparse
 from pathlib import Path
-import subprocess
 import re
 import sys
-import tarfile
 from urllib.parse import urlparse
-from .repository import load_repository, repository_graph
-from .graph import bfs, load_test_graph, reverse_graph
-from .render import render_svg
+
+from .repository import direct_dependencies
 
 
 def build_parser():
-    """Описать параметры, которые принимает программа."""
+    """Описать семь параметров принятого первого этапа."""
     parser = argparse.ArgumentParser(
-        description="Alpine dependencies: этап 5"
+        description="Python dependencies: stage 2"
     )
     parser.add_argument(
-        "--package", required=True, help="Имя пакета"
+        "--package", required=True, help="Имя Python-пакета"
     )
     parser.add_argument(
         "--repository", required=True,
-        help="URL репозитория или путь к тестовому JSON"
+        help="Корень JSON API PyPI или путь к тестовому JSON"
     )
     parser.add_argument(
         "--test", action="store_true",
-        help="Использовать тестовый JSON"
+        help="Тестовый режим: обработка графа добавляется в stage 3"
     )
     parser.add_argument(
-        "--output", default="graph.svg",
-        help="Имя выходного файла SVG"
+        "--output", default="graph.svg", help="Имя будущего SVG"
     )
     parser.add_argument(
-        "--filter", default="",
-        help="Исключать имена с указанной подстрокой"
+        "--filter", default="", help="Фильтр для stage 3"
     )
     parser.add_argument(
-        "--reverse", action="store_true",
-        help="Найти прямые и транзитивные обратные зависимости"
+        "--version", required=True, help="Точная запись версии пакета"
     )
     parser.add_argument(
-        "--visualize", action="store_true",
-        help="Сохранить PlantUML и изображение SVG"
+        "--max-depth", required=True, type=int,
+        help="Глубина от 0: применяется начиная со stage 3"
     )
-    parser.add_argument(
-        "--jar", default="tools/plantuml.jar",
-        help="Путь к файлу PlantUML JAR"
-    )
-    parser.add_argument("--max-depth", type=int,
-                        help="Максимальная глубина от 0")
     return parser
 
 
@@ -86,9 +75,7 @@ def validate_output(args):
 
 def validate_filter(args):
     """Проверить символы фильтра и исключение корневого пакета."""
-    if args.filter and not re.fullmatch(
-        r"[A-Za-z0-9+_.-]+", args.filter
-    ):
+    if args.filter and not re.fullmatch(r"[A-Za-z0-9+_.-]+", args.filter):
         raise ValueError(
             "--filter: нужны символы имени пакета, без пробелов"
         )
@@ -96,12 +83,16 @@ def validate_filter(args):
         raise ValueError("--filter: исключает сам анализируемый пакет")
 
 
+def validate_version(args):
+    """Проверить запись версии, не реализуя весь стандарт PEP 440."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.!+_-]*", args.version):
+        raise ValueError("--version: версия содержит недопустимые символы")
+
+
 def validate_depth(args):
-    """Проверить допустимость глубины анализа."""
-    if args.max_depth is not None and args.max_depth < 0:
-        raise ValueError(
-            "--max-depth: глубина не может быть отрицательной"
-        )
+    """Проверить неотрицательную глубину анализа."""
+    if args.max_depth < 0:
+        raise ValueError("--max-depth: глубина не может быть отрицательной")
 
 
 def arguments(argv=None):
@@ -113,58 +104,29 @@ def arguments(argv=None):
         validate_repository(args)
         validate_output(args)
         validate_filter(args)
+        validate_version(args)
         validate_depth(args)
     except (ValueError, OSError) as error:
         parser.error(str(error))
     return args
 
 
-def load_graph(args):
-    """Получить граф из тестового файла или индекса Alpine."""
-    if args.test:
-        return load_test_graph(args.repository)
-    packages = load_repository(args.repository)
-    if args.package not in packages:
-        raise ValueError(
-            f"Пакет {args.package} не найден в репозитории"
-        )
-    return repository_graph(packages)
-
-
-def print_graph(graph):
-    """Вывести вершины и связи в порядке обхода."""
-    for name, dependencies in graph.items():
-        text = ", ".join(dependencies) or "(нет)"
-        print(name + " -> " + text)
-
-
 def execute(args):
-    """Выполнить выбранный анализ и необязательную отрисовку."""
-    graph = load_graph(args)
-    if args.reverse:
-        graph = reverse_graph(graph)
-    selected = bfs(
-        graph, args.package, args.filter, args.max_depth
+    """Получить и вывести только прямые требования данного релиза."""
+    if args.test:
+        raise ValueError("Обработка тестового графа добавляется в stage 3")
+    dependencies = direct_dependencies(
+        args.repository, args.package, args.version
     )
-    print_graph(selected)
-    if args.reverse:
-        dependents = [name for name in selected if name != args.package]
-        text = ", ".join(dependents) or "(нет)"
-        print("Обратные зависимости: " + text)
-    if args.visualize:
-        output = render_svg(selected, args.output, args.jar)
-        print(f"Создано изображение: {output}")
+    print("\n".join(dependencies) or "(нет объявленных прямых зависимостей)")
 
 
 def main(argv=None):
-    """Запустить анализ и обработать ошибки выполнения."""
+    """Выполнить второй этап и обработать ошибки данных и сети."""
     args = arguments(argv)
     try:
         execute(args)
-    except (
-        OSError, ValueError, tarfile.TarError, EOFError,
-        subprocess.SubprocessError,
-    ) as error:
+    except (OSError, ValueError) as error:
         print(f"Ошибка: {error}", file=sys.stderr)
         return 1
     return 0
