@@ -123,43 +123,44 @@ class CliTests(unittest.TestCase):
         del args[position:position + 2]
         self.assert_rejected(args, "--max-depth")
 
-    def test_direct_output_and_version(self):
-        """Передать выбранную версию и вывести прямые требования целиком."""
-        dependencies = ["base>=2", 'optional; extra == "feature"']
-        with patch("src.main.direct_dependencies") as mocked:
-            mocked.return_value = dependencies
+    def test_python_graph_output(self):
+        """Передать версию и глубину ленивому Python-источнику."""
+        root = ("requests", "2.32.3", ())
+        child = ("base", "1.0", ())
+        with patch("src.main.PythonRepository") as mocked:
+            repository = mocked.return_value
+            repository.dependencies.side_effect = lambda n: (
+                [child] if n == root else []
+            )
             output = io.StringIO()
             with redirect_stdout(output):
                 self.assertEqual(main(self.base_args()), 0)
-            mocked.assert_called_once_with(REPOSITORY, "requests", "2.32.3")
-        self.assertEqual(output.getvalue().splitlines(), dependencies)
-
-    def test_empty_output(self):
-        """Пояснить отсутствие объявленных зависимостей."""
-        with patch("src.main.direct_dependencies", return_value=[]):
-            output = io.StringIO()
-            with redirect_stdout(output):
-                self.assertEqual(main(self.base_args()), 0)
-        self.assertIn("нет объявленных прямых зависимостей", output.getvalue())
+            repository.info.assert_called_once_with(root)
+        self.assertEqual(output.getvalue().splitlines(), [
+            "requests@2.32.3 -> base@1.0", "base@1.0 -> (нет)",
+        ])
 
     def test_network_failure(self):
         """Ошибка сети должна возвращать код 1."""
-        with patch("src.main.direct_dependencies", side_effect=OSError):
+        with patch("src.main.PythonRepository", side_effect=OSError):
             with redirect_stderr(io.StringIO()) as output:
                 self.assertEqual(main(self.base_args()), 1)
         self.assertIn("Ошибка:", output.getvalue())
 
-    def test_test_execution_deferred(self):
-        """Явно объяснить, что тестовые графы относятся к stage 3."""
+    def test_test_execution(self):
+        """Подключить JSON, глубину и BFS к обычному запуску."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "graph.json"
-            path.write_text('{"A": []}', encoding="utf-8")
+            path.write_text(
+                '{"A":["B"],"B":["C"],"C":[]}', encoding="utf-8"
+            )
             args = self.base_args() + [
                 "--package", "A", "--repository", str(path), "--test",
+                "--max-depth", "1",
             ]
-            with redirect_stderr(io.StringIO()) as output:
-                self.assertEqual(main(args), 1)
-            self.assertIn("stage 3", output.getvalue())
+            with redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(main(args), 0)
+            self.assertEqual(output.getvalue(), "A -> B\nB -> (нет)\n")
 
 
 if __name__ == "__main__":
