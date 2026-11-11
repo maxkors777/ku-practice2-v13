@@ -23,6 +23,18 @@ def load_test_graph(path):
     return graph
 
 
+def filtered_dependencies(graph, current, excluded):
+    """Проверить вершину и отфильтровать её зависимости."""
+    if graph[current] is None:
+        raise ValueError(
+            f"Не найден однозначный пакет-поставщик: {current}"
+        )
+    return [
+        name for name in sorted(graph[current])
+        if not excluded or excluded not in name
+    ]
+
+
 def bfs(graph, start, excluded=""):
     """Обойти зависимости очередью, без рекурсии."""
     if start not in graph:
@@ -34,14 +46,9 @@ def bfs(graph, start, excluded=""):
     result = {}
     while queue:
         current = queue.popleft()
-        if graph[current] is None:
-            raise ValueError(
-                f"Не найден однозначный пакет-поставщик: {current}"
-            )
-        dependencies = [
-            name for name in sorted(graph[current])
-            if not excluded or excluded not in name
-        ]
+        dependencies = filtered_dependencies(
+            graph, current, excluded
+        )
         result[current] = dependencies
         for dependency in dependencies:
             if dependency not in visited:
