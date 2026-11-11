@@ -35,25 +35,39 @@ def filtered_dependencies(graph, current, excluded):
     ]
 
 
-def bfs(graph, start, excluded=""):
-    """Обойти зависимости очередью, без рекурсии."""
+def validate_start(graph, start, excluded, max_depth):
+    """Проверить корень, фильтр и допустимость глубины."""
     if start not in graph:
         raise ValueError(f"Пакет {start} не найден")
     if excluded and excluded in start:
         raise ValueError("Фильтр исключает начальный пакет")
-    queue = deque([start])
+    if max_depth is not None and max_depth < 0:
+        raise ValueError("Глубина не может быть отрицательной")
+
+
+def dependencies_at_depth(graph, current, excluded, depth, max_depth):
+    """Не раскрывать зависимости на предельном уровне."""
+    if max_depth is not None and depth >= max_depth:
+        return []
+    return filtered_dependencies(graph, current, excluded)
+
+
+def bfs(graph, start, excluded="", max_depth=None):
+    """Обойти граф очередью с учётом максимальной глубины."""
+    validate_start(graph, start, excluded, max_depth)
+    queue = deque([(start, 0)])
     visited = {start}
     result = {}
     while queue:
-        current = queue.popleft()
-        dependencies = filtered_dependencies(
-            graph, current, excluded
+        current, depth = queue.popleft()
+        dependencies = dependencies_at_depth(
+            graph, current, excluded, depth, max_depth
         )
         result[current] = dependencies
         for dependency in dependencies:
             if dependency not in visited:
                 visited.add(dependency)
-                queue.append(dependency)
+                queue.append((dependency, depth + 1))
     return result
 
 

@@ -47,6 +47,8 @@ def build_parser():
         "--jar", default="tools/plantuml.jar",
         help="Путь к файлу PlantUML JAR"
     )
+    parser.add_argument("--max-depth", type=int,
+                        help="Максимальная глубина от 0")
     return parser
 
 
@@ -94,6 +96,14 @@ def validate_filter(args):
         raise ValueError("--filter: исключает сам анализируемый пакет")
 
 
+def validate_depth(args):
+    """Проверить допустимость глубины анализа."""
+    if args.max_depth is not None and args.max_depth < 0:
+        raise ValueError(
+            "--max-depth: глубина не может быть отрицательной"
+        )
+
+
 def arguments(argv=None):
     """Прочитать параметры и сообщить об ошибках ввода."""
     parser = build_parser()
@@ -103,6 +113,7 @@ def arguments(argv=None):
         validate_repository(args)
         validate_output(args)
         validate_filter(args)
+        validate_depth(args)
     except (ValueError, OSError) as error:
         parser.error(str(error))
     return args
@@ -132,7 +143,9 @@ def execute(args):
     graph = load_graph(args)
     if args.reverse:
         graph = reverse_graph(graph)
-    selected = bfs(graph, args.package, args.filter)
+    selected = bfs(
+        graph, args.package, args.filter, args.max_depth
+    )
     print_graph(selected)
     if args.reverse:
         dependents = [name for name in selected if name != args.package]
