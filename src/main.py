@@ -1,4 +1,4 @@
-"""Stage 2: прямые зависимости указанной версии Python-пакета."""
+"""Stage 3: транзитивные зависимости Python, BFS без рекурсии."""
 
 import argparse
 from pathlib import Path
@@ -6,13 +6,15 @@ import re
 import sys
 from urllib.parse import urlparse
 
-from .repository import direct_dependencies
+from .repository import normalize_name
+from .graph import bfs, load_test_graph, print_graph
+from .python_graph import PythonRepository
 
 
 def build_parser():
     """Описать семь параметров принятого первого этапа."""
     parser = argparse.ArgumentParser(
-        description="Python dependencies: stage 2"
+        description="Python dependencies: stage 3"
     )
     parser.add_argument(
         "--package", required=True, help="Имя Python-пакета"
@@ -23,7 +25,7 @@ def build_parser():
     )
     parser.add_argument(
         "--test", action="store_true",
-        help="Тестовый режим: обработка графа добавляется в stage 3"
+        help="Читать тестовый JSON-граф"
     )
     parser.add_argument(
         "--output", default="graph.svg", help="Имя будущего SVG"
@@ -36,7 +38,7 @@ def build_parser():
     )
     parser.add_argument(
         "--max-depth", required=True, type=int,
-        help="Глубина от 0: применяется начиная со stage 3"
+        help="Максимальная глубина: 0 — только начальный пакет"
     )
     return parser
 
@@ -112,17 +114,21 @@ def arguments(argv=None):
 
 
 def execute(args):
-    """Получить и вывести только прямые требования данного релиза."""
+    """Построить ограниченный граф BFS и вывести его рёбра."""
     if args.test:
-        raise ValueError("Обработка тестового графа добавляется в stage 3")
-    dependencies = direct_dependencies(
-        args.repository, args.package, args.version
-    )
-    print("\n".join(dependencies) or "(нет объявленных прямых зависимостей)")
+        source = load_test_graph(args.repository)
+        root = args.package
+    else:
+        repository = PythonRepository(args.repository, args.filter)
+        root = (normalize_name(args.package), args.version, ())
+        repository.info(root)
+        source = repository.dependencies
+    selected = bfs(source, root, args.filter, args.max_depth)
+    print_graph(selected)
 
 
 def main(argv=None):
-    """Выполнить второй этап и обработать ошибки данных и сети."""
+    """Выполнить stage 3 и обработать ошибки данных и сети."""
     args = arguments(argv)
     try:
         execute(args)

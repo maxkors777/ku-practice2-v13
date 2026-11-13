@@ -7,6 +7,7 @@ from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
 
 NETWORK_TIMEOUT = 30
+HTTP_NOT_FOUND = 404
 NAME_PATTERN = r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?"
 
 
@@ -83,7 +84,6 @@ def read_dependencies(info):
             raise ValueError("Требование не должно содержать переносы строк")
     return list(dependencies)
 
-HTTP_NOT_FOUND = 404
 
 def fetch_metadata(address, package, version):
     """Получить JSON по HTTP без pip и сторонних библиотек."""
