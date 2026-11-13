@@ -83,6 +83,7 @@ def read_dependencies(info):
             raise ValueError("Требование не должно содержать переносы строк")
     return list(dependencies)
 
+HTTP_NOT_FOUND = 404
 
 def fetch_metadata(address, package, version):
     """Получить JSON по HTTP без pip и сторонних библиотек."""
@@ -94,7 +95,7 @@ def fetch_metadata(address, package, version):
         with urlopen(request, timeout=NETWORK_TIMEOUT) as response:
             return json.loads(response.read().decode("utf-8"))
     except HTTPError as error:
-        if error.code == 404:
+        if error.code == HTTP_NOT_FOUND:
             raise ValueError("Пакет или указанная версия не найдены") from error
         raise
 
