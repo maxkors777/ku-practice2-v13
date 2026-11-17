@@ -1,4 +1,4 @@
-"""Stage 3: транзитивные зависимости Python, BFS без рекурсии."""
+"""Stage 4: прямые и транзитивные обратные зависимости Python."""
 
 import argparse
 from pathlib import Path
@@ -7,14 +7,15 @@ import sys
 from urllib.parse import urlparse
 
 from .repository import normalize_name
-from .graph import bfs, load_test_graph, print_graph
+from .graph import bfs, load_test_graph, node_label, print_graph
+from .reverse import read_roots, reverse_graph, universe_graph
 from .python_graph import PythonRepository
 
 
 def build_parser():
     """Описать семь параметров принятого первого этапа."""
     parser = argparse.ArgumentParser(
-        description="Python dependencies: stage 3"
+        description="Python dependencies: stage 4"
     )
     parser.add_argument(
         "--package", required=True, help="Имя Python-пакета"
@@ -39,6 +40,12 @@ def build_parser():
     parser.add_argument(
         "--max-depth", required=True, type=int,
         help="Максимальная глубина: 0 — только начальный пакет"
+    )
+    parser.add_argument(
+        "--reverse", action="store_true", help="Обратные зависимости"
+    )
+    parser.add_argument(
+        "--roots", help="JSON исходных пакетов для обратного поиска в PyPI"
     )
     return parser
 
@@ -97,6 +104,16 @@ def validate_depth(args):
         raise ValueError("--max-depth: глубина не может быть отрицательной")
 
 
+def validate_reverse_options(args):
+    """Проверить явно определённую область обратного анализа."""
+    if args.roots and (not args.reverse or args.test):
+        raise ValueError("--roots используется только с --reverse без --test")
+    if args.reverse and not args.test and not args.roots:
+        raise ValueError("Для обратного поиска в PyPI укажите --roots")
+    if args.roots and not Path(args.roots).is_file():
+        raise ValueError("--roots: файл не найден")
+
+
 def arguments(argv=None):
     """Прочитать параметры и сообщить об ошибках ввода."""
     parser = build_parser()
@@ -108,27 +125,49 @@ def arguments(argv=None):
         validate_filter(args)
         validate_version(args)
         validate_depth(args)
+        validate_reverse_options(args)
     except (ValueError, OSError) as error:
         parser.error(str(error))
     return args
 
 
-def execute(args):
-    """Построить ограниченный граф BFS и вывести его рёбра."""
+def root_node(args):
+    """Вернуть буквенную вершину либо конкретный Python-релиз."""
+    if args.test:
+        return args.package
+    return normalize_name(args.package), args.version, ()
+
+
+def selected_graph(args):
+    """Выбрать источник, развернуть весь граф и выполнить прежний BFS."""
+    root = root_node(args)
     if args.test:
         source = load_test_graph(args.repository)
-        root = args.package
     else:
         repository = PythonRepository(args.repository, args.filter)
-        root = (normalize_name(args.package), args.version, ())
         repository.info(root)
         source = repository.dependencies
-    selected = bfs(source, root, args.filter, args.max_depth)
+        if args.reverse:
+            source = universe_graph(
+                repository, root, read_roots(args.roots), args.filter
+            )
+    if args.reverse:
+        source = reverse_graph(source)
+    return bfs(source, root, args.filter, args.max_depth)
+
+
+def execute(args):
+    """Показать выбранный граф и итог обратного поиска."""
+    selected = selected_graph(args)
     print_graph(selected)
+    if args.reverse:
+        root = root_node(args)
+        dependents = [node_label(node) for node in selected if node != root]
+        print("Обратные зависимости: " + (", ".join(dependents) or "(нет)"))
 
 
 def main(argv=None):
-    """Выполнить stage 3 и обработать ошибки данных и сети."""
+    """Выполнить stage 4 и обработать ошибки данных и сети."""
     args = arguments(argv)
     try:
         execute(args)
