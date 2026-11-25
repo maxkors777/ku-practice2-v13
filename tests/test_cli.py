@@ -170,13 +170,16 @@ class CliTests(unittest.TestCase):
         ]
         with redirect_stdout(io.StringIO()) as output:
             self.assertEqual(main(args), 0)
-        self.assertEqual(output.getvalue(), "Порядок загрузки: D -> B -> C -> A\n")
+        self.assertEqual(
+            output.getvalue(), "Порядок загрузки: D -> B -> C -> A\n"
+        )
 
     def test_load_order_with_depth(self):
         """Применить указанный предел к графу перед сортировкой."""
         args = [
             "--package", "A", "--version", "1.0", "--test",
-            "--repository", "tests/chain.json", "--load-order", "--max-depth", "1",
+            "--repository", "tests/chain.json", "--load-order",
+            "--max-depth", "1",
         ]
         with redirect_stdout(io.StringIO()) as output:
             self.assertEqual(main(args), 0)
