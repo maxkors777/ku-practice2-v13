@@ -7,13 +7,13 @@ import sys
 from urllib.parse import urlparse
 
 from .repository import normalize_name
-from .graph import bfs, load_test_graph, node_label, print_graph
+from .graph import bfs, load_order, load_test_graph, node_label, print_graph
 from .reverse import read_roots, reverse_graph, universe_graph
 from .python_graph import PythonRepository
 
 
 def build_parser():
-    """Описать семь параметров принятого первого этапа."""
+    """Описать параметры источника и режимы анализа."""
     parser = argparse.ArgumentParser(
         description="Python dependencies: stage 4"
     )
@@ -38,11 +38,16 @@ def build_parser():
         "--version", required=True, help="Точная запись версии пакета"
     )
     parser.add_argument(
-        "--max-depth", required=True, type=int,
+        "--max-depth", type=int,
         help="Максимальная глубина: 0 — только начальный пакет"
     )
-    parser.add_argument(
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
         "--reverse", action="store_true", help="Обратные зависимости"
+    )
+    modes.add_argument(
+        "--load-order", action="store_true",
+        help="Показать порядок загрузки: зависимости перед пакетом"
     )
     parser.add_argument(
         "--roots", help="JSON исходных пакетов для обратного поиска в PyPI"
@@ -99,8 +104,10 @@ def validate_version(args):
 
 
 def validate_depth(args):
-    """Проверить неотрицательную глубину анализа."""
-    if args.max_depth < 0:
+    """Проверить глубину, обязательную для режимов вывода графа."""
+    if args.max_depth is None and not args.load_order:
+        raise ValueError("Укажите --max-depth для вывода графа")
+    if args.max_depth is not None and args.max_depth < 0:
         raise ValueError("--max-depth: глубина не может быть отрицательной")
 
 
@@ -157,8 +164,12 @@ def selected_graph(args):
 
 
 def execute(args):
-    """Показать выбранный граф и итог обратного поиска."""
+    """Показать порядок загрузки или выбранный граф."""
     selected = selected_graph(args)
+    if args.load_order:
+        sequence = " -> ".join(map(node_label, load_order(selected)))
+        print(f"Порядок загрузки: {sequence}")
+        return
     print_graph(selected)
     if args.reverse:
         root = root_node(args)

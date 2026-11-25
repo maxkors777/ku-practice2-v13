@@ -2,6 +2,7 @@
 set -e
 
 cd "$(dirname "$0")"
+export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
 
 if [[ "${1:-}" == "--tests" ]]; then
     python -m unittest discover -s tests -v

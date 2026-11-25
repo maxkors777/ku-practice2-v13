@@ -1,6 +1,7 @@
 """Тестовый граф и BFS без рекурсии с глубиной и фильтром."""
 
 from collections import deque
+from graphlib import CycleError, TopologicalSorter
 import json
 from pathlib import Path
 import re
@@ -78,3 +79,12 @@ def print_graph(graph):
     for node, dependencies in graph.items():
         text = ", ".join(node_label(value) for value in dependencies) or "(нет)"
         print(node_label(node) + " -> " + text)
+
+
+def load_order(graph):
+    """Упорядочить релизы так, чтобы зависимости шли первыми."""
+    try:
+        return list(TopologicalSorter(graph).static_order())
+    except CycleError as error:
+        cycle = " -> ".join(map(node_label, reversed(error.args[1])))
+        raise ValueError(f"Цикл зависимостей: {cycle}") from error
