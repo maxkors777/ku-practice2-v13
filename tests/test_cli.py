@@ -162,6 +162,44 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(main(args), 0)
             self.assertEqual(output.getvalue(), "A -> B\nB -> (нет)\n")
 
+    def test_load_order_shared_dependency(self):
+        """Показать общую зависимость один раз перед её потребителями."""
+        args = [
+            "--package", "A", "--version", "1.0", "--test",
+            "--repository", "tests/diamond.json", "--load-order",
+        ]
+        with redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(main(args), 0)
+        self.assertEqual(output.getvalue(), "Порядок загрузки: D -> B -> C -> A\n")
+
+    def test_load_order_with_depth(self):
+        """Применить указанный предел к графу перед сортировкой."""
+        args = [
+            "--package", "A", "--version", "1.0", "--test",
+            "--repository", "tests/chain.json", "--load-order", "--max-depth", "1",
+        ]
+        with redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(main(args), 0)
+        self.assertEqual(output.getvalue(), "Порядок загрузки: B -> A\n")
+
+    def test_load_order_cycle(self):
+        """Сообщить о цикле без вывода частичного порядка."""
+        args = [
+            "--package", "A", "--version", "1.0", "--test",
+            "--repository", "tests/cycle.json", "--load-order",
+        ]
+        with redirect_stderr(io.StringIO()) as error:
+            with redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(main(args), 1)
+        self.assertIn("Цикл зависимостей: A -> B -> C -> A", error.getvalue())
+        self.assertEqual(output.getvalue(), "")
+
+    def test_load_order_incompatible_with_reverse(self):
+        """Порядок загрузки определяется по прямым зависимостям."""
+        self.assert_rejected(
+            self.base_args() + ["--load-order", "--reverse"], "--load-order"
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
